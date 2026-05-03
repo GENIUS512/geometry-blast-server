@@ -2,6 +2,7 @@
 import json
 import os
 import base64
+import time
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 
@@ -13,6 +14,7 @@ MUSIC_DIR = "music"
 os.makedirs(LEVELS_DIR, exist_ok=True)
 os.makedirs(MUSIC_DIR, exist_ok=True)
 
+# База данных уровней
 levels_db = {}
 next_id = 1
 
@@ -22,9 +24,23 @@ if os.path.exists("levels_db.json"):
         levels_db = {int(k): v for k, v in data.get("levels", {}).items()}
         next_id = data.get("next_id", 1)
 
-def save_db():
+# База данных пользователей
+users_db = {}
+next_user_id = 1
+
+if os.path.exists("users_db.json"):
+    with open("users_db.json", "r") as f:
+        data = json.load(f)
+        users_db = {int(k): v for k, v in data.get("users", {}).items()}
+        next_user_id = data.get("next_user_id", 1)
+
+def save_levels_db():
     with open("levels_db.json", "w") as f:
         json.dump({"levels": levels_db, "next_id": next_id}, f)
+
+def save_users_db():
+    with open("users_db.json", "w") as f:
+        json.dump({"users": users_db, "next_user_id": next_user_id}, f)
 
 @app.route("/", methods=["GET"])
 def home():
@@ -103,7 +119,7 @@ def upload_level():
         "downloads": 0
     }
     
-    save_db()
+    save_levels_db()
     print(f"[Server] New level: {level_name} (ID: {level_id}) by {level_author}")
     
     return jsonify({"success": True, "id": level_id})
@@ -115,7 +131,7 @@ def download_level(level_id):
     
     info = levels_db[level_id]
     info["downloads"] = info.get("downloads", 0) + 1
-    save_db()
+    save_levels_db()
     
     with open(f"{LEVELS_DIR}/level_{level_id}.json", "r") as f:
         level_data = json.load(f)
@@ -131,6 +147,59 @@ def download_level(level_id):
         "level_name": info["name"],
         "level_author": info["author"]
     })
+
+# ========== АККАУНТЫ ==========
+
+@app.route("/api/register", methods=["POST"])
+def register():
+    global next_user_id
+    data = request.json
+    
+    username = data.get("username", "").strip()
+    password = data.get("password", "").strip()
+    
+    if not username or not password:
+        return jsonify({"success": False, "error": "Username and password required"})
+    
+    for user in users_db.values():
+        if user["username"] == username:
+            return jsonify({"success": False, "error": "Username already exists"})
+    
+    user_id = next_user_id
+    next_user_id += 1
+    
+    users_db[user_id] = {
+        "id": user_id,
+        "username": username,
+        "password": password,
+        "created_at": time.time()
+    }
+    
+    save_users_db()
+    print(f"[Server] New user: {username} (ID: {user_id})")
+    
+    return jsonify({
+        "success": True,
+        "user_id": user_id,
+        "username": username
+    })
+
+@app.route("/api/login", methods=["POST"])
+def login():
+    data = request.json
+    username = data.get("username", "").strip()
+    password = data.get("password", "").strip()
+    
+    for user in users_db.values():
+        if user["username"] == username and user["password"] == password:
+            print(f"[Server] User logged in: {username}")
+            return jsonify({
+                "success": True,
+                "user_id": user["id"],
+                "username": user["username"]
+            })
+    
+    return jsonify({"success": False, "error": "Invalid username or password"})
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
