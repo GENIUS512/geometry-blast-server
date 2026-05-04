@@ -214,6 +214,39 @@ def complete_level():
     
     return jsonify({"success": True, "completed": levels_db[level_id]["completed"]})
 
+@app.route("/api/delete_level/<int:level_id>", methods=["DELETE"])
+def delete_level(level_id):
+    """Удаляет уровень с сервера (только для владельца)"""
+    # Получаем имя пользователя из запроса
+    data = request.json
+    username = data.get("username", "")
+    
+    if level_id not in levels_db:
+        return jsonify({"error": "Level not found"}), 404
+    
+    level = levels_db[level_id]
+    
+    # Проверяем, является ли пользователь владельцем
+    if level["author"] != username:
+        return jsonify({"error": "You can only delete your own levels"}), 403
+    
+    # Удаляем файлы
+    level_path = f"{LEVELS_DIR}/level_{level_id}.json"
+    music_path = f"{MUSIC_DIR}/level_{level_id}.mp3"
+    
+    if os.path.exists(level_path):
+        os.remove(level_path)
+    if os.path.exists(music_path):
+        os.remove(music_path)
+    
+    # Удаляем из базы
+    del levels_db[level_id]
+    save_levels_db()
+    
+    print(f"[Server] Level {level_id} deleted by {username}")
+    
+    return jsonify({"success": True, "message": "Level deleted"})
+
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port)
