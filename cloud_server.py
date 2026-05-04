@@ -201,6 +201,19 @@ def login():
     
     return jsonify({"success": False, "error": "Invalid username or password"})
 
+@app.route("/api/complete_level/<int:level_id>", methods=["POST"])
+def complete_level():
+    """Увеличивает счётчик прохождений уровня"""
+    level_id = request.view_args.get('level_id')
+    
+    if level_id not in levels_db:
+        return jsonify({"error": "Level not found"}), 404
+    
+    levels_db[level_id]["completed"] = levels_db[level_id].get("completed", 0) + 1
+    save_levels_db()
+    
+    return jsonify({"success": True, "completed": levels_db[level_id]["completed"]})
+
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port)
